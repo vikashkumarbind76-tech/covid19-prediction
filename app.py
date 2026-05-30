@@ -24,46 +24,59 @@ app.secret_key = os.environ.get('SECRET_KEY', 'covid19_prediction_system_secret_
 # Firebase connection setup
 firebase_initialized = False
 
-# Try local service account key file first
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-cred_path = os.path.join(BASE_DIR, 'firebase-key.json')
+# Check if already initialized (common during hot reloads)
+try:
+    firebase_admin.get_app()
+    firebase_initialized = True
+    print("Firebase already initialized.")
+except ValueError:
+    pass
 
-if os.path.exists(cred_path):
-    try:
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-        firebase_initialized = True
-        print("Successfully initialized Firebase using local key.")
-    except Exception as e:
-        print(f"Error initializing Firebase with local key: {e}")
-
-# If not initialized, try environment credentials next
 if not firebase_initialized:
-    cred_json = os.environ.get('FIREBASE_CREDENTIALS')
-    if cred_json:
+    # Try local service account key file first
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    cred_path = os.path.join(BASE_DIR, 'firebase-key.json')
+
+    if os.path.exists(cred_path):
         try:
-            cred_dict = json.loads(cred_json)
-            cred = credentials.Certificate(cred_dict)
+            cred = credentials.Certificate(cred_path)
             firebase_admin.initialize_app(cred)
             firebase_initialized = True
-            print("Successfully initialized Firebase using environment credentials.")
+            print("Successfully initialized Firebase using local key.")
         except Exception as e:
-            print(f"Error initializing Firebase with environment credentials: {e}")
+            print(f"Error initializing Firebase with local key: {e}")
 
-# If still not initialized, try default credentials
-if not firebase_initialized:
-    try:
-        firebase_admin.initialize_app()
-        firebase_initialized = True
-        print("Successfully initialized Firebase using Default Application Credentials.")
-    except Exception as e:
-        print(f"Error initializing Firebase with Default Credentials: {e}")
+    # If not initialized, try environment credentials next
+    if not firebase_initialized:
+        cred_json = os.environ.get('FIREBASE_CREDENTIALS')
+        if cred_json:
+            try:
+                cred_dict = json.loads(cred_json)
+                cred = credentials.Certificate(cred_dict)
+                firebase_admin.initialize_app(cred)
+                firebase_initialized = True
+                print("Successfully initialized Firebase using environment credentials.")
+            except Exception as e:
+                print(f"Error initializing Firebase with environment credentials: {e}")
+
+    # If still not initialized, try default credentials
+    if not firebase_initialized:
+        try:
+            firebase_admin.initialize_app()
+            firebase_initialized = True
+            print("Successfully initialized Firebase using Default Application Credentials.")
+        except Exception as e:
+            print(f"Error initializing Firebase with Default Credentials: {e}")
 
 # Get firestore database client if initialized
+db = None
 if firebase_initialized:
-    db = firestore.client()
+    try:
+        db = firestore.client()
+    except Exception as e:
+        print(f"Error initializing Firestore client: {e}")
+        db = None
 else:
-    db = None
     print("Warning: Firebase not initialized. Database operations will fail.")
 
 # Define export paths
