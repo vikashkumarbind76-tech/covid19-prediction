@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - COVID-19 AI Diagnostics</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- ChartJS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dashboard-body">
+    <div class="glass-bg-blobs">
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-cyan"></div>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Top Navigation -->
+        <nav class="dashboard-nav glass-card">
+            <div class="nav-brand">
+                <i class="fa-solid fa-virus-covid nav-icon"></i>
+                <div class="nav-brand-text">
+                    <h1>COVID-19 <span>Diagnostics</span></h1>
+                    <span class="badge badge-admin">Admin Dashboard</span>
+                </div>
+            </div>
+            <div class="nav-actions">
+                <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">
+                    <i class="fa-solid fa-house"></i> Public Portal
+                </a>
+                <a href="{{ url_for('admin_logout') }}" class="btn btn-danger btn-sm">
+                    <i class="fa-solid fa-right-from-bracket"></i> Log Out
+                </a>
+            </div>
+        </nav>
+
+        <!-- Stats Grid -->
+        <section class="stats-grid">
+            <div class="stat-card glass-card">
+                <div class="stat-icon icon-blue"><i class="fa-solid fa-users"></i></div>
+                <div class="stat-info">
+                    <h3>Total Screenings</h3>
+                    <p class="stat-value" id="val-total">{{ stats.total_screenings }}</p>
+                </div>
+            </div>
+            
+            <div class="stat-card glass-card">
+                <div class="stat-icon icon-red"><i class="fa-solid fa-circle-plus"></i></div>
+                <div class="stat-info">
+                    <h3>Positive Cases</h3>
+                    <p class="stat-value text-danger" id="val-pos">{{ stats.positive_cases }}</p>
+                    <span class="stat-subtext">{% if stats.total_screenings > 0 %}{{ ((stats.positive_cases / stats.total_screenings) * 100) | round(1) }}{% else %}0{% endif %}% of total</span>
+                </div>
+            </div>
+
+            <div class="stat-card glass-card">
+                <div class="stat-icon icon-green"><i class="fa-solid fa-circle-minus"></i></div>
+                <div class="stat-info">
+                    <h3>Negative Cases</h3>
+                    <p class="stat-value text-success" id="val-neg">{{ stats.negative_cases }}</p>
+                    <span class="stat-subtext">{% if stats.total_screenings > 0 %}{{ ((stats.negative_cases / stats.total_screenings) * 100) | round(1) }}{% else %}0{% endif %}% of total</span>
+                </div>
+            </div>
+
+            <div class="stat-card glass-card">
+                <div class="stat-icon icon-purple"><i class="fa-solid fa-percent"></i></div>
+                <div class="stat-info">
+                    <h3>Positivity Rate</h3>
+                    <p class="stat-value text-purple" id="val-rate">{{ stats.positivity_rate }}%</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Analytics Charts -->
+        <section class="charts-section">
+            <div class="chart-card glass-card">
+                <h3><i class="fa-solid fa-chart-pie"></i> Diagnostic Split</h3>
+                <div class="chart-wrapper">
+                    <canvas id="splitChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-card glass-card">
+                <h3><i class="fa-solid fa-chart-column"></i> Symptoms Distribution</h3>
+                <div class="chart-wrapper">
+                    <canvas id="symptomsChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prediction Log Database Table -->
+        <section class="table-section glass-card">
+            <div class="table-header">
+                <div class="table-title">
+                    <h3><i class="fa-solid fa-database"></i> Screened Patients Database</h3>
+                    <p>Live registry of diagnostic screenings processed by the AI classifier.</p>
+                </div>
+                <div class="table-actions">
+                    <a href="{{ url_for('export_csv') }}" class="btn btn-success btn-sm">
+                        <i class="fa-solid fa-file-csv"></i> Export CSV Registry
+                    </a>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="table-filters">
+                <div class="filter-group search-group">
+                    <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                    <input type="text" id="search-input" placeholder="Search by patient name...">
+                </div>
+                
+                <div class="filters-row">
+                    <div class="filter-select">
+                        <label for="filter-result">Risk Result</label>
+                        <select id="filter-result">
+                            <option value="All">All Results</option>
+                            <option value="Positive">Positive Only</option>
+                            <option value="Negative">Negative Only</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-select">
+                        <label for="filter-gender">Gender</label>
+                        <select id="filter-gender">
+                            <option value="All">All Genders</option>
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="table-container">
+                <table class="predictions-table" id="predictions-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Patient Name</th>
+                            <th>Account</th>
+                            <th>Age</th>
+                            <th>Gender</th>
+                            <th>Symptoms Logged</th>
+                            <th>Exposure</th>
+                            <th>Result Status</th>
+                            <th>Risk Score</th>
+                            <th>Timestamp</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in records %}
+                        <tr class="prediction-row" data-name="{{ record.name | lower }}" data-result="{{ record.result }}" data-gender="{{ record.gender }}">
+                            <td class="col-id">#{{ record.id }}</td>
+                            <td class="col-name"><strong>{{ record.name }}</strong></td>
+                            <td class="col-username"><span class="badge badge-slate"><i class="fa-solid fa-circle-user"></i> {{ record.user_username }}</span></td>
+                            <td class="col-age">{{ record.age }} y/o</td>
+                            <td class="col-gender">{{ record.gender }}</td>
+                            <td class="col-symptoms">
+                                <span class="symptoms-tooltip-trigger" title="{{ record.symptoms }}">
+                                    {{ record.symptoms }}
+                                </span>
+                            </td>
+                            <td class="col-contact">
+                                <span class="badge {% if record.contact == 'Yes' %}badge-yellow{% else %}badge-slate{% endif %}">
+                                    {{ record.contact }}
+                                </span>
+                            </td>
+                            <td class="col-result">
+                                <span class="result-indicator {{ record.risk_class }}">{{ record.result }}</span>
+                            </td>
+                            <td class="col-prob">
+                                <span class="probability-glow">{{ record.probability }}%</span>
+                            </td>
+                            <td class="col-time">{{ record.timestamp }}</td>
+                            <td class="col-actions">
+                                <button type="button" class="btn-delete-record" data-id="{{ record.id }}" title="Delete Assessment">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr id="no-records-row">
+                            <td colspan="11" class="empty-table-message">
+                                <i class="fa-solid fa-folder-open"></i>
+                                <p>No diagnostic screenings recorded yet.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <!-- Scripting data serialization for ChartJS -->
+    <script>
+        const chartData = {
+            positive: {{ stats.positive_cases }},
+            negative: {{ stats.negative_cases }},
+            fever: {{ stats.fever }},
+            cough: {{ stats.cough }},
+            sore_throat: {{ stats.sore_throat }},
+            shortness_of_breath: {{ stats.shortness_of_breath }},
+            headache: {{ stats.headache }},
+            contact: {{ stats.contact }}
+        };
+    </script>
+    <!-- Script File -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

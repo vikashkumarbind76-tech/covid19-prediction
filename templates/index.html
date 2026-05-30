@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COVID-19 AI Diagnostics Portal</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="glass-bg-blobs">
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-cyan"></div>
+    </div>
+
+    <div class="app-container">
+        <!-- Top Header Navigation -->
+        <header class="app-header">
+            <div class="brand">
+                <i class="fa-solid fa-virus-covid brand-icon"></i>
+                <div class="brand-text">
+                    <h1>COVID-19 <span>AI Diagnostics</span></h1>
+                    <p>Clinical Symptoms Prediction Engine</p>
+                </div>
+            </div>
+            <div class="nav-actions" style="display: flex; gap: 0.75rem; align-items: center;">
+                <a href="{{ url_for('index') }}" class="btn-admin-link">
+                    <i class="fa-solid fa-gauge"></i> Dashboard
+                </a>
+                <a href="{{ url_for('logout') }}" class="btn-admin-link" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.2);">
+                    <i class="fa-solid fa-right-from-bracket"></i> Log Out
+                </a>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Diagnosis Wizard Form Card -->
+            <section class="card glass-card" id="screening-card">
+                <div class="card-header">
+                    <h2>Symptom Assessment screening</h2>
+                    <p>Fill out the profile and symptoms to get a real-time risk assessment.</p>
+                </div>
+
+                <!-- Progress Tracker -->
+                <div class="progress-bar-container">
+                    <div class="step-indicator active" id="step-ind-1">
+                        <span class="step-num">1</span>
+                        <span class="step-label">Profile</span>
+                    </div>
+                    <div class="step-line" id="line-1"></div>
+                    <div class="step-indicator" id="step-ind-2">
+                        <span class="step-num">2</span>
+                        <span class="step-label">Symptoms</span>
+                    </div>
+                    <div class="step-line" id="line-2"></div>
+                    <div class="step-indicator" id="step-ind-3">
+                        <span class="step-num">3</span>
+                        <span class="step-label">Exposure</span>
+                    </div>
+                </div>
+
+                <form id="screening-form">
+                    <!-- Step 1: Personal Profile -->
+                    <div class="form-step step-active" id="step-1">
+                        <div class="step-title">
+                            <h3><i class="fa-solid fa-id-card-clip"></i> Patient Demographics</h3>
+                            <p>Please enter basic profile details. Gender and age are checked as variables in the clinical prediction model.</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="patient-name">Full Name</label>
+                            <div class="input-wrapper">
+                                <i class="fa-solid fa-user"></i>
+                                <input type="text" id="patient-name" name="name" placeholder="e.g., John Doe" value="{{ user['name'] }}" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="patient-age">Age</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-cake-candles"></i>
+                                    <input type="number" id="patient-age" name="age" min="1" max="120" placeholder="e.g., 28" value="{{ user['age'] }}" required>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="patient-gender">Gender</label>
+                                <div class="input-wrapper">
+                                    <i class="fa-solid fa-venus-mars"></i>
+                                    <select id="patient-gender" name="gender" required>
+                                        <option value="" disabled>Select Gender</option>
+                                        <option value="Male" {% if user['gender'] == 'Male' %}selected{% endif %}>Male</option>
+                                        <option value="Female" {% if user['gender'] == 'Female' %}selected{% endif %}>Female</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <div></div>
+                            <button type="button" class="btn btn-primary btn-next" data-next="2">
+                                Next Step <i class="fa-solid fa-arrow-right-long"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Clinical Symptoms Checklist -->
+                    <div class="form-step" id="step-2">
+                        <div class="step-title">
+                            <h3><i class="fa-solid fa-clipboard-list"></i> Clinical Symptoms</h3>
+                            <p>Identify all current symptoms you are experiencing. Select all that apply.</p>
+                        </div>
+
+                        <div class="checkbox-grid">
+                            <label class="checkbox-card">
+                                <input type="checkbox" name="fever" id="symp-fever">
+                                <div class="checkbox-card-content">
+                                    <div class="icon-box"><i class="fa-solid fa-temperature-high"></i></div>
+                                    <div class="details">
+                                        <h4>Fever</h4>
+                                        <p>Temperature &ge; 38°C (100.4°F)</p>
+                                    </div>
+                                    <div class="checkbox-indicator"><i class="fa-solid fa-check"></i></div>
+                                </div>
+                            </label>
+
+                            <label class="checkbox-card">
+                                <input type="checkbox" name="cough" id="symp-cough">
+                                <div class="checkbox-card-content">
+                                    <div class="icon-box"><i class="fa-solid fa-lungs"></i></div>
+                                    <div class="details">
+                                        <h4>Dry Cough</h4>
+                                        <p>Persistent or throat irritation</p>
+                                    </div>
+                                    <div class="checkbox-indicator"><i class="fa-solid fa-check"></i></div>
+                                </div>
+                            </label>
+
+                            <label class="checkbox-card">
+                                <input type="checkbox" name="sore_throat" id="symp-throat">
+                                <div class="checkbox-card-content">
+                                    <div class="icon-box"><i class="fa-solid fa-head-side-cough"></i></div>
+                                    <div class="details">
+                                        <h4>Sore Throat</h4>
+                                        <p>Pain, scratching or swallowing issues</p>
+                                    </div>
+                                    <div class="checkbox-indicator"><i class="fa-solid fa-check"></i></div>
+                                </div>
+                            </label>
+
+                            <label class="checkbox-card">
+                                <input type="checkbox" name="shortness_of_breath" id="symp-sob">
+                                <div class="checkbox-card-content">
+                                    <div class="icon-box"><i class="fa-solid fa-wind"></i></div>
+                                    <div class="details">
+                                        <h4>Shortness of Breath</h4>
+                                        <p>Difficulty breathing or chest tightness</p>
+                                    </div>
+                                    <div class="checkbox-indicator"><i class="fa-solid fa-check"></i></div>
+                                </div>
+                            </label>
+
+                            <label class="checkbox-card grid-col-span-2">
+                                <input type="checkbox" name="headache" id="symp-headache">
+                                <div class="checkbox-card-content">
+                                    <div class="icon-box"><i class="fa-solid fa-head-side-virus"></i></div>
+                                    <div class="details">
+                                        <h4>Severe Headache</h4>
+                                        <p>Pounding headache or migraine-like pain</p>
+                                    </div>
+                                    <div class="checkbox-indicator"><i class="fa-solid fa-check"></i></div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary btn-prev" data-prev="1">
+                                <i class="fa-solid fa-arrow-left-long"></i> Back
+                            </button>
+                            <button type="button" class="btn btn-primary btn-next" data-next="3">
+                                Next Step <i class="fa-solid fa-arrow-right-long"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Exposure Info -->
+                    <div class="form-step" id="step-3">
+                        <div class="step-title">
+                            <h3><i class="fa-solid fa-circle-exclamation"></i> Exposure History</h3>
+                            <p>Have you been exposed to confirmed cases of COVID-19?</p>
+                        </div>
+
+                        <div class="exposure-box">
+                            <label class="checkbox-card">
+                                <input type="checkbox" name="contact" id="exposure-contact">
+                                <div class="checkbox-card-content">
+                                    <div class="icon-box"><i class="fa-solid fa-people-arrows"></i></div>
+                                    <div class="details">
+                                        <h4>Contact with Positive Case</h4>
+                                        <p>Direct exposure to an individual diagnosed with COVID-19 in the past 14 days.</p>
+                                    </div>
+                                    <div class="checkbox-indicator"><i class="fa-solid fa-check"></i></div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="disclaimer-info">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <p><strong>Disclaimer:</strong> This prediction system evaluates symptom probabilities using a machine learning model. It does not replace professional medical diagnosis or laboratory testing.</p>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary btn-prev" data-prev="2">
+                                <i class="fa-solid fa-arrow-left-long"></i> Back
+                            </button>
+                            <button type="submit" class="btn btn-success" id="btn-submit-assessment">
+                                <i class="fa-solid fa-microchip"></i> Run AI Diagnosis
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Loading overlay -->
+            <section class="card glass-card hidden" id="loading-card">
+                <div class="loading-content">
+                    <div class="pulsing-loader">
+                        <i class="fa-solid fa-virus-covid"></i>
+                        <div class="pulse-ring"></div>
+                    </div>
+                    <h3 id="loader-text">Analyzing symptoms...</h3>
+                    <p>Executing machine learning classification models on symptom data vectors.</p>
+                </div>
+            </section>
+
+            <!-- Results Card -->
+            <section class="card glass-card hidden" id="results-card">
+                <div class="results-layout">
+                    <!-- Probability Ring / Gauge -->
+                    <div class="results-visual">
+                        <div class="probability-circle-container">
+                            <svg class="progress-ring-svg" width="180" height="180">
+                                <circle class="progress-ring-bg" stroke="rgba(255,255,255,0.05)" stroke-width="12" fill="transparent" r="80" cx="90" cy="90"/>
+                                <circle id="probability-gauge" class="progress-ring-indicator" stroke="#00d2ff" stroke-width="12" fill="transparent" r="80" cx="90" cy="90" stroke-linecap="round"/>
+                            </svg>
+                            <div class="probability-text">
+                                <span id="probability-value">0%</span>
+                                <span class="subtext">Probability</span>
+                            </div>
+                        </div>
+                        <div class="risk-badge" id="risk-badge-value">Low Risk</div>
+                    </div>
+
+                    <!-- Details and Recommendations -->
+                    <div class="results-details">
+                        <div class="results-header">
+                            <h3 id="results-patient-name">Diagnostic Report</h3>
+                            <span class="report-timestamp"><i class="fa-solid fa-clock"></i> Generated Just Now</span>
+                        </div>
+
+                        <div class="results-summary">
+                            <p id="assessment-summary-text">Based on the symptoms provided, the machine learning model has computed your infection index.</p>
+                        </div>
+
+                        <div class="recommendations-container">
+                            <h4><i class="fa-solid fa-circle-check"></i> Recommended Actions:</h4>
+                            <ul id="recommendations-list" class="recs-list">
+                                <!-- Populated dynamically -->
+                            </ul>
+                        </div>
+
+                        <div class="results-actions" style="display: flex; gap: 0.75rem;">
+                            <button type="button" class="btn btn-secondary" id="btn-reassess">
+                                <i class="fa-solid fa-rotate-right"></i> Start New Assessment
+                            </button>
+                            <a href="{{ url_for('index') }}" class="btn btn-primary">
+                                <i class="fa-solid fa-gauge"></i> Go to Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <p>&copy; 2026 COVID-19 Clinical Prediction Portal. Built with Flask, Scikit-Learn &amp; SQLite.</p>
+        </footer>
+    </div>
+
+    <!-- Script File -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

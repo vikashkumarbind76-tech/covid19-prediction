@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Dashboard - COVID-19 AI Diagnostics</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="dashboard-body">
+    <div class="glass-bg-blobs">
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-cyan"></div>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Dashboard Navigation -->
+        <nav class="dashboard-nav glass-card">
+            <div class="nav-brand">
+                <i class="fa-solid fa-virus-covid nav-icon"></i>
+                <div class="nav-brand-text">
+                    <h1>COVID-19 <span>Diagnostics</span></h1>
+                    <span class="badge badge-admin">Patient Portal</span>
+                </div>
+            </div>
+            <div class="nav-profile-info" style="display: flex; flex-direction: column; align-items: flex-end; margin-left: auto; margin-right: 1.5rem; text-align: right;">
+                <span style="font-weight: 700; font-size: 0.95rem;">{{ session['name'] }}</span>
+                <span style="font-size: 0.75rem; color: var(--text-secondary);"><i class="fa-solid fa-circle-user"></i> @{{ session['username'] }}</span>
+            </div>
+            <div class="nav-actions">
+                <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm">
+                    <i class="fa-solid fa-right-from-bracket"></i> Log Out
+                </a>
+            </div>
+        </nav>
+
+        <!-- Action Section / Launch Panel -->
+        <section class="card glass-card" style="margin-bottom: 2rem; padding: 2rem 2.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;">
+            <div style="flex: 1; min-width: 250px;">
+                <h2 style="font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; margin-bottom: 0.3rem;">Run Symptom Diagnostics</h2>
+                <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4;">Start our AI-guided diagnostics wizard. Check key symptom markers and receive clinical recommendations instantly.</p>
+            </div>
+            <a href="{{ url_for('screen') }}" class="btn btn-primary" style="padding: 0.9rem 2rem; border-radius: 14px; font-size: 1rem; box-shadow: 0 0 20px -3px var(--primary-glow);">
+                <i class="fa-solid fa-microchip"></i> New Assessment screening <i class="fa-solid fa-chevron-right" style="font-size: 0.8rem; margin-left: 0.25rem;"></i>
+            </a>
+        </section>
+
+        <!-- Stats row -->
+        <section class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 2rem;">
+            <div class="stat-card glass-card">
+                <div class="stat-icon icon-blue"><i class="fa-solid fa-clipboard-check"></i></div>
+                <div class="stat-info">
+                    <h3>Assessments Completed</h3>
+                    <p class="stat-value" style="font-size: 1.8rem;">{{ total }}</p>
+                </div>
+            </div>
+            
+            <div class="stat-card glass-card">
+                <div class="stat-icon icon-red"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div class="stat-info">
+                    <h3>High Risk Results</h3>
+                    <p class="stat-value text-danger" style="font-size: 1.8rem;">{{ positives }}</p>
+                </div>
+            </div>
+
+            <div class="stat-card glass-card">
+                <div class="stat-icon icon-green"><i class="fa-solid fa-shield-heart"></i></div>
+                <div class="stat-info">
+                    <h3>Low Risk Results</h3>
+                    <p class="stat-value text-success" style="font-size: 1.8rem;">{{ negatives }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prediction History Table -->
+        <section class="table-section glass-card" style="padding: 2rem;">
+            <div class="table-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                <div class="table-title">
+                    <h3><i class="fa-solid fa-history"></i> Your Screening Registry</h3>
+                    <p>Archived history of AI screenings logged under your profile.</p>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="table-container">
+                <table class="predictions-table">
+                    <thead>
+                        <tr>
+                            <th>Ref ID</th>
+                            <th>Assessment Time</th>
+                            <th>Logged Symptoms</th>
+                            <th>Exposure</th>
+                            <th>Risk Outcome</th>
+                            <th>Probability</th>
+                            <th style="text-align: center;">Clinical Report Downloads</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in records %}
+                        <tr>
+                            <td class="col-id">#COVID-00{{ record.id }}</td>
+                            <td class="col-time">{{ record.timestamp }}</td>
+                            <td class="col-symptoms">
+                                <span class="symptoms-tooltip-trigger" title="{{ record.symptoms }}">
+                                    {{ record.symptoms }}
+                                </span>
+                            </td>
+                            <td class="col-contact">
+                                <span class="badge {% if record.contact == 'Yes' %}badge-yellow{% else %}badge-slate{% endif %}">
+                                    {{ record.contact }}
+                                </span>
+                            </td>
+                            <td class="col-result">
+                                <span class="result-indicator {{ record.risk_class }}">{{ record.result }}</span>
+                            </td>
+                            <td class="col-prob">
+                                <span class="probability-glow" style="text-shadow: 0 0 8px rgba(6, 182, 212, 0.3);">{{ record.probability }}%</span>
+                            </td>
+                            <td style="display: flex; gap: 0.5rem; justify-content: center;">
+                                <a href="{{ url_for('download_docx', pred_id=record.id) }}" class="btn btn-secondary btn-sm" style="background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.25); color: #818cf8; font-weight: 500;">
+                                    <i class="fa-solid fa-file-word" style="color: #6366f1;"></i> Word Doc
+                                </a>
+                                <a href="{{ url_for('download_pdf', pred_id=record.id) }}" class="btn btn-secondary btn-sm" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.25); color: #fca5a5; font-weight: 500;">
+                                    <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> PDF Report
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="empty-table-message" style="text-align: center; padding: 4rem 0;">
+                                <i class="fa-solid fa-notes-medical" style="font-size: 2.5rem; color: var(--text-muted); margin-bottom: 0.75rem;"></i>
+                                <p>You have not logged any symptom screenings yet.</p>
+                                <a href="{{ url_for('screen') }}" class="btn btn-primary btn-sm" style="margin-top: 1rem;">
+                                    Perform First Screening
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="app-footer">
+            <p>&copy; 2026 COVID-19 Clinical Prediction Portal. Built with Flask, Scikit-Learn &amp; SQLite.</p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Login - COVID-19 AI Diagnostics</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="auth-body">
+    <div class="glass-bg-blobs">
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-cyan"></div>
+    </div>
+
+    <div class="auth-container">
+        <div class="card glass-card auth-card">
+            <div class="auth-header">
+                <i class="fa-solid fa-user-circle auth-icon"></i>
+                <h2>Welcome Back</h2>
+                <p>Login to perform diagnostic assessments and download past reports</p>
+            </div>
+
+            {% if error %}
+            <div class="alert alert-danger">
+                <i class="fa-solid fa-circle-exclamation"></i> {{ error }}
+            </div>
+            {% endif %}
+
+            {% if success %}
+            <div class="alert alert-success" style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #6ee7b7; font-weight: 500; padding: 0.85rem 1.25rem; border-radius: 12px; margin-bottom: 1.5rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.75rem;">
+                <i class="fa-solid fa-circle-check" style="color: #10b981;"></i> {{ success }}
+            </div>
+            {% endif %}
+
+            <form action="{{ url_for('login') }}" method="POST" class="auth-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-user"></i>
+                        <input type="text" id="username" name="username" placeholder="Enter your username" required autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-lock"></i>
+                        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    <i class="fa-solid fa-right-to-bracket"></i> Log In
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <p>New to the diagnostics portal?</p>
+                <a href="{{ url_for('register') }}" class="btn-back-home" style="margin-top: 0.5rem; display: inline-block; font-weight: 600;">
+                    <i class="fa-solid fa-user-plus"></i> Create Account
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
