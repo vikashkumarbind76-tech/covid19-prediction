@@ -34,10 +34,16 @@ except Exception as e:
 
 # Define export paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EXPORTS_DIR = os.path.join(BASE_DIR, 'exports')
+if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
+    EXPORTS_DIR = '/tmp/exports'
+else:
+    EXPORTS_DIR = os.path.join(BASE_DIR, 'exports')
 
 # Ensure directories exist
-os.makedirs(EXPORTS_DIR, exist_ok=True)
+try:
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+except Exception as e:
+    print(f"Warning: Could not create exports directory {EXPORTS_DIR}: {e}")
 
 # Admin Credentials
 ADMIN_USERNAME = 'admin'
