@@ -2,10 +2,11 @@ import os
 import pickle
 import csv
 from datetime import datetime
+import json
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
-from pymongo import MongoClient, ReturnDocument
-from pymongo.errors import DuplicateKeyError
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # Document Generation Imports
 from docx import Document
@@ -20,20 +21,52 @@ from reportlab.lib import colors
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'covid19_prediction_system_secret_key_123!@#')
 
-# MongoDB connection
-MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/')
-try:
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
-    # Check connection
-    client.server_info()
-    db = client['covid_prediction_system']
-    print("Successfully connected to MongoDB.")
-except Exception as e:
-    print(f"Error connecting to MongoDB: {e}")
+# Firebase connection setup
+firebase_initialized = False
+
+# Try local service account key file first
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+cred_path = os.path.join(BASE_DIR, 'firebase-key.json')
+
+if os.path.exists(cred_path):
+    try:
+        cred = credentials.Certificate(cred_path)
+        firebase_admin.initialize_app(cred)
+        firebase_initialized = True
+        print("Successfully initialized Firebase using local key.")
+    except Exception as e:
+        print(f"Error initializing Firebase with local key: {e}")
+
+# If not initialized, try environment credentials next
+if not firebase_initialized:
+    cred_json = os.environ.get('FIREBASE_CREDENTIALS')
+    if cred_json:
+        try:
+            cred_dict = json.loads(cred_json)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            firebase_initialized = True
+            print("Successfully initialized Firebase using environment credentials.")
+        except Exception as e:
+            print(f"Error initializing Firebase with environment credentials: {e}")
+
+# If still not initialized, try default credentials
+if not firebase_initialized:
+    try:
+        firebase_admin.initialize_app()
+        firebase_initialized = True
+        print("Successfully initialized Firebase using Default Application Credentials.")
+    except Exception as e:
+        print(f"Error initializing Firebase with Default Credentials: {e}")
+
+# Get firestore database client if initialized
+if firebase_initialized:
+    db = firestore.client()
+else:
     db = None
+    print("Warning: Firebase not initialized. Database operations will fail.")
 
 # Define export paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
     EXPORTS_DIR = '/tmp/exports'
 else:
@@ -62,24 +95,28 @@ except Exception as e:
 def get_next_sequence_value(sequence_name):
     if db is None:
         raise Exception("Database not connected.")
-    result = db.counters.find_one_and_update(
-        {'_id': sequence_name},
-        {'$inc': {'sequence_value': 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    return result['sequence_value']
+    
+    doc_ref = db.collection('counters').document(sequence_name)
+    transaction = db.transaction()
+    
+    @firestore.transactional
+    def update_in_transaction(transaction, doc_ref):
+        snapshot = doc_ref.get(transaction=transaction)
+        if snapshot.exists:
+            new_val = snapshot.get('sequence_value') + 1
+            transaction.update(doc_ref, {'sequence_value': new_val})
+            return new_val
+        else:
+            transaction.set(doc_ref, {'sequence_value': 1})
+            return 1
+            
+    return update_in_transaction(transaction, doc_ref)
 
 def init_db():
     if db is None:
         print("Database not connected. Skipping initialization.")
         return
-    # Ensure unique index on username
-    db.users.create_index('username', unique=True)
-    # Ensure index on predictions id and user_id for faster queries
-    db.predictions.create_index('id')
-    db.predictions.create_index('user_id')
-    print("MongoDB Database initialized with indexes.")
+    print("Firebase Firestore Database connected successfully.")
 
 init_db()
 
@@ -93,11 +130,16 @@ def index():
     if not session.get('user_id'):
         return redirect(url_for('login'))
         
-    user_records = list(db.predictions.find({'user_id': session['user_id']}).sort('timestamp', -1))
+    if db is None:
+        user_records = []
+    else:
+        user_records_stream = db.collection('predictions').where('user_id', '==', session['user_id']).stream()
+        user_records = [doc.to_dict() for doc in user_records_stream]
+        user_records.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
     
     # Compile totals for the dashboard
     total = len(user_records)
-    positives = sum(1 for r in user_records if r['prediction_result'] == 'Positive')
+    positives = sum(1 for r in user_records if r.get('prediction_result') == 'Positive')
     negatives = total - positives
     
     records = []
@@ -137,7 +179,12 @@ def screen():
     if not session.get('user_id'):
         return redirect(url_for('login'))
         
-    user = db.users.find_one({'id': session['user_id']})
+    if db is None:
+        user = None
+    else:
+        user_doc = db.collection('users').document(str(session['user_id'])).get()
+        user = user_doc.to_dict() if user_doc.exists else None
+        
     return render_template('index.html', user=user)
 
 # ==========================================================================
@@ -159,22 +206,27 @@ def register():
         
         if not (username and password and name and age and gender):
             error = 'All fields are required.'
+        elif db is None:
+            error = 'Registration failed: Database not connected.'
         else:
             try:
-                hashed_pw = generate_password_hash(password)
-                user_id = get_next_sequence_value('users')
-                db.users.insert_one({
-                    'id': user_id,
-                    'username': username,
-                    'password': hashed_pw,
-                    'name': name,
-                    'age': int(age),
-                    'gender': gender,
-                    'created_at': datetime.utcnow()
-                })
-                return redirect(url_for('login', registered=True))
-            except DuplicateKeyError:
-                error = 'Username already registered. Please choose another one.'
+                users_ref = db.collection('users')
+                existing_user_query = users_ref.where('username', '==', username).limit(1).stream()
+                if any(existing_user_query):
+                    error = 'Username already registered. Please choose another one.'
+                else:
+                    hashed_pw = generate_password_hash(password)
+                    user_id = get_next_sequence_value('users')
+                    users_ref.document(str(user_id)).set({
+                        'id': user_id,
+                        'username': username,
+                        'password': hashed_pw,
+                        'name': name,
+                        'age': int(age),
+                        'gender': gender,
+                        'created_at': datetime.utcnow()
+                    })
+                    return redirect(url_for('login', registered=True))
             except Exception as e:
                 error = f'Registration failed: {str(e)}'
                 
@@ -197,16 +249,22 @@ def login():
         
         if not (username and password):
             error = 'Please enter both username and password.'
+        elif db is None:
+            error = 'Login failed: Database not connected.'
         else:
-            user = db.users.find_one({'username': username})
+            users_ref = db.collection('users')
+            existing_user_query = users_ref.where('username', '==', username).limit(1).stream()
+            user_doc = next(existing_user_query, None)
             
-            if user and check_password_hash(user['password'], password):
-                session['user_id'] = user['id']
-                session['username'] = user['username']
-                session['name'] = user['name']
-                return redirect(url_for('index'))
-            else:
-                error = 'Invalid username or password.'
+            if user_doc:
+                user = user_doc.to_dict()
+                if check_password_hash(user['password'], password):
+                    session['user_id'] = user['id']
+                    session['username'] = user['username']
+                    session['name'] = user['name']
+                    return redirect(url_for('index'))
+            
+            error = 'Invalid username or password.'
                 
     return render_template('login.html', error=error, success=success)
 
@@ -264,8 +322,11 @@ def predict():
         prob_percentage = round(prob_positive * 100, 1)
         
         # Store in Database
+        if db is None:
+            raise Exception("Database not connected.")
+            
         pred_id = get_next_sequence_value('predictions')
-        db.predictions.insert_one({
+        db.collection('predictions').document(str(pred_id)).set({
             'id': pred_id,
             'name': name,
             'age': age,
@@ -326,10 +387,17 @@ def download_docx(pred_id):
     if not (session.get('user_id') or session.get('admin_logged_in')):
         return redirect(url_for('login'))
         
-    record = db.predictions.find_one({'id': pred_id})
+    if db is None:
+        return "Database not connected.", 500
+        
+    predictions_ref = db.collection('predictions')
+    pred_query = predictions_ref.where('id', '==', pred_id).limit(1).stream()
+    pred_doc = next(pred_query, None)
     
-    if not record:
+    if not pred_doc:
         return "Record not found.", 404
+        
+    record = pred_doc.to_dict()
         
     # Security check: User can only download their own reports (unless admin is logged in)
     if not session.get('admin_logged_in') and record['user_id'] != session.get('user_id'):
@@ -465,10 +533,17 @@ def download_pdf(pred_id):
     if not (session.get('user_id') or session.get('admin_logged_in')):
         return redirect(url_for('login'))
         
-    record = db.predictions.find_one({'id': pred_id})
+    if db is None:
+        return "Database not connected.", 500
+        
+    predictions_ref = db.collection('predictions')
+    pred_query = predictions_ref.where('id', '==', pred_id).limit(1).stream()
+    pred_doc = next(pred_query, None)
     
-    if not record:
+    if not pred_doc:
         return "Record not found.", 404
+        
+    record = pred_doc.to_dict()
         
     # Security check: User can only download their own reports (unless admin is logged in)
     if not session.get('admin_logged_in') and record['user_id'] != session.get('user_id'):
@@ -641,37 +716,27 @@ def admin_dashboard():
     if not session.get('admin_logged_in'):
         return redirect(url_for('admin_login'))
         
-    # Query predictions joining users table to fetch usernames
-    records_raw = list(db.predictions.aggregate([
-        {
-            '$lookup': {
-                'from': 'users',
-                'localField': 'user_id',
-                'foreignField': 'id',
-                'as': 'user_info'
-            }
-        },
-        {
-            '$unwind': {
-                'path': '$user_info',
-                'preserveNullAndEmptyArrays': True
-            }
-        },
-        {
-            '$addFields': {
-                'user_username': '$user_info.username'
-            }
-        },
-        {
-            '$sort': {
-                'timestamp': -1
-            }
-        }
-    ]))
+    if db is None:
+        records_raw = []
+    else:
+        # Fetch predictions and sort in memory
+        preds_stream = db.collection('predictions').stream()
+        records_raw = [doc.to_dict() for doc in preds_stream]
+        records_raw.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Fetch users to merge username details
+        users_stream = db.collection('users').stream()
+        users_map = {}
+        for u_doc in users_stream:
+            u_data = u_doc.to_dict()
+            users_map[u_data.get('id')] = u_data.get('username')
+            
+        for r in records_raw:
+            r['user_username'] = users_map.get(r.get('user_id'), 'Guest')
     
     # Calculate stats
     total_screenings = len(records_raw)
-    positive_cases = sum(1 for r in records_raw if r['prediction_result'] == 'Positive')
+    positive_cases = sum(1 for r in records_raw if r.get('prediction_result') == 'Positive')
     negative_cases = total_screenings - positive_cases
     positivity_rate = round((positive_cases / total_screenings * 100), 1) if total_screenings > 0 else 0
     
@@ -736,8 +801,11 @@ def delete_record(record_id):
     if not session.get('admin_logged_in'):
         return jsonify({'error': 'Unauthorized'}), 401
         
+    if db is None:
+        return jsonify({'error': 'Database not connected.'}), 500
+        
     try:
-        db.predictions.delete_one({'id': record_id})
+        db.collection('predictions').document(str(record_id)).delete()
         return jsonify({'success': True, 'message': 'Record deleted successfully.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -751,34 +819,23 @@ def export_csv():
     filename = f"predictions_export_{timestamp}.csv"
     export_path = os.path.join(EXPORTS_DIR, filename)
     
+    if db is None:
+        return "Database not connected.", 500
+        
     try:
-        # Fetch records using the same aggregation lookup
-        records_raw = list(db.predictions.aggregate([
-            {
-                '$lookup': {
-                    'from': 'users',
-                    'localField': 'user_id',
-                    'foreignField': 'id',
-                    'as': 'user_info'
-                }
-            },
-            {
-                '$unwind': {
-                    'path': '$user_info',
-                    'preserveNullAndEmptyArrays': True
-                }
-            },
-            {
-                '$addFields': {
-                    'user_username': '$user_info.username'
-                }
-            },
-            {
-                '$sort': {
-                    'timestamp': -1
-                }
-            }
-        ]))
+        # Fetch records and merge in memory
+        preds_stream = db.collection('predictions').stream()
+        records_raw = [doc.to_dict() for doc in preds_stream]
+        records_raw.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        users_stream = db.collection('users').stream()
+        users_map = {}
+        for u_doc in users_stream:
+            u_data = u_doc.to_dict()
+            users_map[u_data.get('id')] = u_data.get('username')
+            
+        for r in records_raw:
+            r['user_username'] = users_map.get(r.get('user_id'), 'Guest')
         
         # Define headers
         headers = [
