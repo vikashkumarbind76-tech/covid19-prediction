@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COVID-19 AI Clinical Diagnostics Engine</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .hero-section {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 70vh;
+            gap: 4rem;
+            margin-bottom: 4rem;
+            padding: 2rem 0;
+        }
+        .hero-content {
+            flex: 1;
+            max-width: 600px;
+        }
+        .hero-title {
+            font-family: var(--font-heading);
+            font-size: 3rem;
+            font-weight: 800;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, #ffffff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-title span {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 2.5rem;
+            line-height: 1.6;
+        }
+        .hero-buttons {
+            display: flex;
+            gap: 1.25rem;
+            flex-wrap: wrap;
+        }
+        .hero-visual {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .hero-glow-ring {
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
+            position: absolute;
+            animation: pulseGlow 4s infinite alternate;
+        }
+        .hero-icon-large {
+            font-size: 8rem;
+            color: var(--primary);
+            filter: drop-shadow(0 0 30px var(--primary-glow));
+            animation: spinSlow 25s linear infinite;
+            z-index: 1;
+        }
+        @keyframes pulseGlow {
+            0% { transform: scale(0.9); opacity: 0.6; }
+            100% { transform: scale(1.1); opacity: 1; }
+        }
+        .section-title {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+        .section-title h2 {
+            font-family: var(--font-heading);
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .section-title p {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-bottom: 5rem;
+        }
+        .feature-card {
+            padding: 2.5rem;
+            border-radius: 20px;
+            text-align: center;
+        }
+        .feature-icon-box {
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.75rem;
+            color: var(--primary);
+            margin: 0 auto 1.5rem auto;
+            transition: var(--transition-smooth);
+        }
+        .feature-card:hover .feature-icon-box {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 0 20px var(--primary-glow);
+            transform: translateY(-3px);
+        }
+        .feature-card h3 {
+            font-family: var(--font-heading);
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            color: var(--text-primary);
+        }
+        .feature-card p {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+        .cta-section {
+            text-align: center;
+            padding: 4rem 2rem;
+            border-radius: 24px;
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.45) 0%, rgba(15, 23, 42, 0.45) 100%);
+            margin-bottom: 5rem;
+            border: 1px solid var(--border-color);
+            position: relative;
+            overflow: hidden;
+        }
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 60%);
+            pointer-events: none;
+        }
+        .cta-title {
+            font-family: var(--font-heading);
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        .cta-subtitle {
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 2.5rem auto;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+        @media (max-width: 992px) {
+            .hero-section {
+                flex-direction: column;
+                text-align: center;
+                gap: 3rem;
+                padding-top: 1rem;
+            }
+            .hero-content {
+                max-width: 100%;
+            }
+            .hero-buttons {
+                justify-content: center;
+            }
+            .features-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body class="dashboard-body">
+    <div class="glass-bg-blobs">
+        <div class="blob blob-purple"></div>
+        <div class="blob blob-cyan"></div>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Top Navbar -->
+        <nav class="dashboard-nav glass-card">
+            <div class="nav-brand">
+                <a href="{{ url_for('homepage') }}" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.75rem;">
+                    <i class="fa-solid fa-virus-covid nav-icon"></i>
+                    <div class="nav-brand-text">
+                        <h1>COVID-19 <span>AI Diagnostics</span></h1>
+                        <span class="badge badge-admin">Patient Portal</span>
+                    </div>
+                </a>
+            </div>
+            
+            <div class="nav-actions" style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
+                <a href="{{ url_for('homepage') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.03);">
+                    <i class="fa-solid fa-house"></i> Home
+                </a>
+                
+                {% if session.get('user_id') %}
+                    <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.03);">
+                        <i class="fa-solid fa-gauge"></i> Dashboard
+                    </a>
+                    <a href="{{ url_for('screen') }}" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-stethoscope"></i> New Screening
+                    </a>
+                {% endif %}
+
+                {% if session.get('admin_logged_in') %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary btn-sm" style="color: var(--primary); border-color: rgba(6, 182, 212, 0.25); background: rgba(6, 182, 212, 0.05);">
+                        <i class="fa-solid fa-gauge-high"></i> Admin Portal
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('admin_login') }}" class="btn btn-secondary btn-sm" style="color: var(--text-secondary); background: transparent; border-color: transparent;">
+                        <i class="fa-solid fa-user-shield"></i> Admin Access
+                    </a>
+                {% endif %}
+
+                {% if session.get('user_id') %}
+                    <div class="nav-profile-info" style="display: flex; flex-direction: column; align-items: flex-end; text-align: right; line-height: 1.2; margin-right: 0.5rem;">
+                        <span style="font-weight: 700; font-size: 0.85rem;">{{ session['name'] }}</span>
+                        <span style="font-size: 0.7rem; color: var(--text-secondary);"><i class="fa-solid fa-circle-user"></i> @{{ session['username'] }}</span>
+                    </div>
+                    <a href="{{ url_for('logout') }}" class="btn btn-danger btn-sm">
+                        <i class="fa-solid fa-right-from-bracket"></i> Log Out
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('login') }}" class="btn btn-secondary btn-sm">
+                        <i class="fa-solid fa-right-to-bracket"></i> Log In
+                    </a>
+                    <a href="{{ url_for('register') }}" class="btn btn-primary btn-sm">
+                        <i class="fa-solid fa-user-plus"></i> Register
+                    </a>
+                {% endif %}
+            </div>
+        </nav>
+
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="hero-content">
+                <h2 class="hero-title">Instant COVID-19 <span>Clinical Screening</span> Powered by AI</h2>
+                <p class="hero-subtitle">Evaluate active health symptoms, map case exposure variables, and get a real-time diagnostics assessment backed by machine learning models. Instantly download clinical Word and PDF reports.</p>
+                <div class="hero-buttons">
+                    <a href="{{ url_for('screen') }}" class="btn btn-primary" style="padding: 1rem 2.25rem; border-radius: 14px; font-size: 1.05rem; box-shadow: 0 0 25px var(--primary-glow);">
+                        <i class="fa-solid fa-microchip"></i> Start Screening Wizard <i class="fa-solid fa-chevron-right" style="font-size: 0.8rem; margin-left: 0.5rem;"></i>
+                    </a>
+                    {% if not session.get('user_id') %}
+                        <a href="{{ url_for('register') }}" class="btn btn-secondary" style="padding: 1rem 2.25rem; border-radius: 14px; font-size: 1.05rem;">
+                            <i class="fa-solid fa-user-plus"></i> Create Free Account
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="hero-glow-ring"></div>
+                <i class="fa-solid fa-virus-covid hero-icon-large"></i>
+            </div>
+        </section>
+
+        <!-- Features Info -->
+        <section style="margin-bottom: 4rem;">
+            <div class="section-title">
+                <h2>Advanced Screening Capabilities</h2>
+                <p>Learn how our predictive diagnostics engine computes infection risk vectors.</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-card glass-card">
+                    <div class="feature-icon-box">
+                        <i class="fa-solid fa-tree"></i>
+                    </div>
+                    <h3>Random Forest Classifier</h3>
+                    <p>Uses an ensemble machine learning model trained on clinical parameter vectors to evaluate probability with state-of-the-art accuracy.</p>
+                </div>
+
+                <div class="feature-card glass-card">
+                    <div class="feature-icon-box">
+                        <i class="fa-solid fa-notes-medical"></i>
+                    </div>
+                    <h3>Clinical Advice</h3>
+                    <p>Instantly maps screening outcomes to precise recommendations, self-isolation guidance, and testing directives.</p>
+                </div>
+
+                <div class="feature-card glass-card">
+                    <div class="feature-icon-box">
+                        <i class="fa-solid fa-file-shield"></i>
+                    </div>
+                    <h3>Secure & Exportable</h3>
+                    <p>Logs history securely under your encrypted patient profile and exports clinical reports in Word and PDF formats.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Landing CTA Section -->
+        <section class="cta-section">
+            <h2 class="cta-title">Begin Your Risk Assessment</h2>
+            <p class="cta-subtitle">Our AI model screens for fever, persistent dry cough, sore throat, severe headache, breathing issues, and direct exposure metrics.</p>
+            <a href="{{ url_for('screen') }}" class="btn btn-primary" style="padding: 1rem 3rem; border-radius: 14px; font-size: 1.1rem; box-shadow: 0 0 25px var(--primary-glow);">
+                <i class="fa-solid fa-stethoscope"></i> Perform Assessment Screening
+            </a>
+        </section>
+
+        <!-- Admin Controls Panel Section -->
+        <section class="card glass-card" style="margin-bottom: 5rem; padding: 2.5rem; display: flex; align-items: center; justify-content: space-between; gap: 2rem; flex-wrap: wrap; border-left: 4px solid var(--secondary);">
+            <div style="flex: 1; min-width: 280px;">
+                <h3 style="font-family: var(--font-heading); font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fa-solid fa-lock" style="color: var(--secondary);"></i> Administrative Control Panel
+                </h3>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">Secure access portal for healthcare administrators. Manage screening registries, evaluate positivity statistics, view patient logs, and export database records.</p>
+            </div>
+            <div>
+                {% if session.get('admin_logged_in') %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary" style="border-color: var(--secondary); color: var(--text-primary); padding: 0.8rem 2rem; border-radius: 12px;">
+                        <i class="fa-solid fa-chart-line" style="color: var(--secondary);"></i> Open Admin Dashboard
+                    </a>
+                {% else %}
+                    <a href="{{ url_for('admin_login') }}" class="btn btn-secondary" style="border-color: var(--secondary); color: var(--text-primary); padding: 0.8rem 2rem; border-radius: 12px;">
+                        <i class="fa-solid fa-shield-halved" style="color: var(--secondary);"></i> Admin Authentication
+                    </a>
+                {% endif %}
+            </div>
+        </section>
+
+        <footer class="app-footer">
+            <p>&copy; 2026 COVID-19 Clinical Prediction Portal. Built with Flask, Scikit-Learn &amp; SQLite.</p>
+        </footer>
+    </div>
+</body>
+</html>

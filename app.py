@@ -3,6 +3,7 @@ import pickle
 import csv
 from datetime import datetime
 import json
+import io
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
@@ -40,7 +41,7 @@ except Exception as e:
 
 # Admin Credentials
 ADMIN_USERNAME = 'admin'
-ADMIN_PASSWORD = 'admin123'
+ADMIN_PASSWORD = 'vikashkumarbind09'
 
 # Load the ML model
 MODEL_PATH = os.path.join(BASE_DIR, 'covid19Model.pkl')
@@ -306,6 +307,10 @@ init_db()
 # ==========================================================================
 
 @app.route('/')
+def homepage():
+    return render_template('home.html')
+
+@app.route('/dashboard')
 def index():
     if not session.get('user_id'):
         return redirect(url_for('login'))
@@ -689,11 +694,17 @@ def download_docx(pred_id):
         disclaimer_run.italic = True
         disclaimer_run.font.color.rgb = RGBColor(148, 163, 184)
         
-        filename = f"covid_report_{record['id']}_{datetime.now().strftime('%Y%m%d')}.docx"
-        filepath = os.path.join(EXPORTS_DIR, filename)
-        doc.save(filepath)
+        filename = f"covid_report_{record['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
+        file_stream = io.BytesIO()
+        doc.save(file_stream)
+        file_stream.seek(0)
         
-        return send_file(filepath, as_attachment=True, download_name=filename)
+        return send_file(
+            file_stream,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        )
     except Exception as e:
         return f"Error generating DOCX document: {str(e)}", 500
 
@@ -714,10 +725,10 @@ def download_pdf(pred_id):
         return "Access denied.", 403
         
     try:
-        filename = f"covid_report_{record['id']}_{datetime.now().strftime('%Y%m%d')}.pdf"
-        filepath = os.path.join(EXPORTS_DIR, filename)
+        filename = f"covid_report_{record['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        file_stream = io.BytesIO()
         
-        doc = SimpleDocTemplate(filepath, pagesize=letter, rightMargin=54, leftMargin=54, topMargin=54, bottomMargin=54)
+        doc = SimpleDocTemplate(file_stream, pagesize=letter, rightMargin=54, leftMargin=54, topMargin=54, bottomMargin=54)
         story = []
         
         styles = getSampleStyleSheet()
@@ -849,7 +860,13 @@ def download_pdf(pred_id):
         story.append(Paragraph("<i>Disclaimer: This report was compiled by an artificial intelligence predictive classifier using symptom records. It does not represent a lab-certified PCR diagnosis. Please consult a medical practitioner if symptoms persist.</i>", disclaimer_style))
         
         doc.build(story)
-        return send_file(filepath, as_attachment=True, download_name=filename)
+        file_stream.seek(0)
+        return send_file(
+            file_stream,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/pdf'
+        )
     except Exception as e:
         return f"Error generating PDF document: {str(e)}", 500
 

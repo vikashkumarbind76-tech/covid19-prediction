@@ -25,15 +25,20 @@
         <!-- Top Navigation -->
         <nav class="dashboard-nav glass-card">
             <div class="nav-brand">
-                <i class="fa-solid fa-virus-covid nav-icon"></i>
-                <div class="nav-brand-text">
-                    <h1>COVID-19 <span>Diagnostics</span></h1>
-                    <span class="badge badge-admin">Admin Dashboard</span>
-                </div>
+                <a href="{{ url_for('homepage') }}" style="text-decoration: none; color: inherit; display: flex; align-items: center; gap: 0.75rem;">
+                    <i class="fa-solid fa-virus-covid nav-icon"></i>
+                    <div class="nav-brand-text">
+                        <h1>COVID-19 <span>AI Diagnostics</span></h1>
+                        <span class="badge badge-admin">Admin Portal</span>
+                    </div>
+                </a>
             </div>
-            <div class="nav-actions">
-                <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm">
-                    <i class="fa-solid fa-house"></i> Public Portal
+            <div class="nav-actions" style="display: flex; align-items: center; gap: 0.75rem; margin-left: auto;">
+                <a href="{{ url_for('homepage') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.03);">
+                    <i class="fa-solid fa-house"></i> Public Home
+                </a>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary btn-sm" style="background: rgba(255,255,255,0.03);">
+                    <i class="fa-solid fa-gauge"></i> Patient Dashboard
                 </a>
                 <a href="{{ url_for('admin_logout') }}" class="btn btn-danger btn-sm">
                     <i class="fa-solid fa-right-from-bracket"></i> Log Out
@@ -181,9 +186,17 @@
                             </td>
                             <td class="col-time" data-label="Timestamp">{{ record.timestamp }}</td>
                             <td class="col-actions" data-label="Actions">
-                                <button type="button" class="btn-delete-record" data-id="{{ record.id }}" title="Delete Assessment">
-                                    <i class="fa-solid fa-trash-can"></i>
-                                </button>
+                                <div style="display: inline-flex; gap: 0.4rem; justify-content: flex-end; align-items: center;">
+                                    <a href="{{ url_for('download_docx', pred_id=record.id) }}" class="btn-action-report docx-report" title="Download Word Doc">
+                                        <i class="fa-solid fa-file-word"></i>
+                                    </a>
+                                    <a href="{{ url_for('download_pdf', pred_id=record.id) }}" class="btn-action-report pdf-report" title="Download PDF Report">
+                                        <i class="fa-solid fa-file-pdf"></i>
+                                    </a>
+                                    <button type="button" class="btn-delete-record" data-id="{{ record.id }}" title="Delete Assessment">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         {% else %}
@@ -202,15 +215,16 @@
 
     <!-- Scripting data serialization for ChartJS -->
     <script>
+        const rawStats = JSON.parse('{{ stats|tojson }}');
         const chartData = {
-            positive: {{ stats.positive_cases }},
-            negative: {{ stats.negative_cases }},
-            fever: {{ stats.fever }},
-            cough: {{ stats.cough }},
-            sore_throat: {{ stats.sore_throat }},
-            shortness_of_breath: {{ stats.shortness_of_breath }},
-            headache: {{ stats.headache }},
-            contact: {{ stats.contact }}
+            positive: rawStats.positive_cases,
+            negative: rawStats.negative_cases,
+            fever: rawStats.fever,
+            cough: rawStats.cough,
+            sore_throat: rawStats.sore_throat,
+            shortness_of_breath: rawStats.shortness_of_breath,
+            headache: rawStats.headache,
+            contact: rawStats.contact
         };
     </script>
     <!-- Script File -->

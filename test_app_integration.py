@@ -49,11 +49,17 @@ def run_integration_tests():
     try:
         # ---- STEP 1: Public Pages before login ----
         print("\n--- Testing Redirects ---")
-        # GET / should redirect to /login if not logged in
+        # GET / should load the public homepage
         res = client.get('/', follow_redirects=False)
+        assert res.status_code == 200
+        assert b"COVID-19" in res.data or b"Diagnostics" in res.data
+        print("PASS: GET '/' loads public homepage successfully")
+        
+        # GET /dashboard should redirect to /login if not logged in
+        res = client.get('/dashboard', follow_redirects=False)
         assert res.status_code == 302
         assert '/login' in res.headers['Location']
-        print("PASS: GET '/' redirects to '/login'")
+        print("PASS: GET '/dashboard' redirects to '/login' when not logged in")
         
         # ---- STEP 2: Login and Registration Pages Load ----
         print("\n--- Testing Page Loads ---")
@@ -125,7 +131,7 @@ def run_integration_tests():
         
         # ---- STEP 6: User Dashboard (Loads 0 records initially) ----
         print("\n--- Testing Dashboard Load ---")
-        res = client.get('/')
+        res = client.get('/dashboard')
         assert res.status_code == 200
         # Check that totals are rendered on dashboard
         assert b"Total" in res.data or b"0" in res.data
@@ -200,7 +206,7 @@ def run_integration_tests():
         # POST admin login (correct credentials)
         res = client.post('/admin/login', data={
             'username': 'admin',
-            'password': 'admin123'
+            'password': 'vikashkumarbind09'
         }, follow_redirects=True)
         assert res.status_code == 200
         print("PASS: Admin login succeeds and enters dashboard")
@@ -254,7 +260,7 @@ def run_integration_tests():
             'password': test_password
         }, follow_redirects=True)
         
-        res = client.get('/')
+        res = client.get('/dashboard')
         assert f"/download/pdf/{saved_pred_id}".encode('utf-8') not in res.data
         assert f"/download/docx/{saved_pred_id}".encode('utf-8') not in res.data
         print("PASS: Deleted record is successfully filtered out from User Dashboard UI")
