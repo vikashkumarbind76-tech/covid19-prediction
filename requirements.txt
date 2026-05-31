@@ -4,5 +4,3 @@ pandas
 scikit-learn
 python-docx
 reportlab
-pymongo
-

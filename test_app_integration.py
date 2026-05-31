@@ -5,7 +5,8 @@ from datetime import datetime
 # Add the project directory to path
 sys.path.append(r"c:\Users\Vikash\OneDrive\Desktop\covid_project_demo\COVID19-Prediction-System")
 
-from app import app, db, get_next_sequence_value
+from app import app, get_next_sequence_value, DB_PATH
+import sqlite3
 
 def run_integration_tests():
     print("Initializing Flask test client...")
@@ -18,18 +19,24 @@ def run_integration_tests():
     client = app.test_client()
     
     # 1. Connection check
-    if db is None:
+    from app import is_db_connected
+    if not is_db_connected():
         print("ERROR: Database is not connected. Aborting tests.")
         sys.exit(1)
         
     print("Database connection verified. Starting route checks...")
     
     # Let's keep track of sequence values to restore them later
-    start_user_seq = db.counters.find_one({'_id': 'users'})
-    start_pred_seq = db.counters.find_one({'_id': 'predictions'})
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT seq FROM sqlite_sequence WHERE name = 'users'")
+    row_user = cursor.fetchone()
+    cursor.execute("SELECT seq FROM sqlite_sequence WHERE name = 'predictions'")
+    row_pred = cursor.fetchone()
+    conn.close()
     
-    start_user_val = start_user_seq['sequence_value'] if start_user_seq else 0
-    start_pred_val = start_pred_seq['sequence_value'] if start_pred_seq else 0
+    start_user_val = row_user[0] if row_user else 0
+    start_pred_val = row_pred[0] if row_pred else 0
     
     # Define test parameters
     test_username = "integration_test_user_unique"
@@ -63,7 +70,11 @@ def run_integration_tests():
         # ---- STEP 3: User Registration ----
         print("\n--- Testing User Registration ---")
         # Clean up in case duplicate user exists from a previous crash
-        db.users.delete_one({'username': test_username})
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE username = ?", (test_username,))
+        conn.commit()
+        conn.close()
         
         res = client.post('/register', data={
             'username': test_username,
@@ -76,7 +87,8 @@ def run_integration_tests():
         assert b"Registration successful" in res.data or b"Log In" in res.data or b"Login" in res.data
         
         # Verify user is inserted in DB
-        db_user = db.users.find_one({'username': test_username})
+        from app import db_get_user_by_username
+        db_user = db_get_user_by_username(test_username)
         assert db_user is not None
         registered_user_id = db_user['id']
         assert db_user['name'] == test_fullname
@@ -149,10 +161,12 @@ def run_integration_tests():
         print(f"PASS: POST '/predict' returned result={json_data['result']}, prob={json_data['probability']}%")
         
         # Verify prediction document was stored in DB
-        db_pred = db.predictions.find_one({'user_id': registered_user_id})
-        assert db_pred is not None
+        from app import db_get_predictions_by_user_id
+        user_preds = db_get_predictions_by_user_id(registered_user_id)
+        assert len(user_preds) > 0
+        db_pred = user_preds[0]
         saved_pred_id = db_pred['id']
-        print(f"Prediction saved in MongoDB with record ID: {saved_pred_id}")
+        print(f"Prediction saved in SQLite database with record ID: {saved_pred_id}")
         
         # ---- STEP 9: Report Generation (Word DOCX) ----
         print("\n--- Testing DOCX Report Generation ---")
@@ -215,11 +229,17 @@ def run_integration_tests():
         assert json_res['success'] is True
         print("PASS: POST '/admin/delete/<id>' returned success JSON")
         
-        # Verify that document is soft-deleted: is_deleted is True in MongoDB
-        direct_doc = db.predictions.find_one({'id': saved_pred_id})
-        assert direct_doc is not None
-        assert direct_doc.get('is_deleted') is True
-        print("PASS: Record is stored permanently in MongoDB with is_deleted: True")
+        # Verify that document is soft-deleted: is_deleted is 1 in SQLite
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM predictions WHERE id = ?", (saved_pred_id,))
+        direct_doc_row = cursor.fetchone()
+        conn.close()
+        assert direct_doc_row is not None
+        direct_doc = dict(direct_doc_row)
+        assert direct_doc.get('is_deleted') == 1
+        print("PASS: Record is stored permanently in SQLite database with is_deleted: 1")
         
         # Verify it is omitted from the Admin Dashboard view
         res = client.get('/admin/dashboard')
@@ -265,22 +285,26 @@ def run_integration_tests():
         sys.exit(1)
     finally:
         # Clean up database test documents entirely
-        print("\nCleaning up test user and prediction records from MongoDB...")
+        print("\nCleaning up test user and prediction records from SQLite...")
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
         if registered_user_id is not None:
-            db.users.delete_one({'id': registered_user_id})
+            cursor.execute("DELETE FROM users WHERE id = ?", (registered_user_id,))
         if saved_pred_id is not None:
-            db.predictions.delete_one({'id': saved_pred_id})
+            cursor.execute("DELETE FROM predictions WHERE id = ?", (saved_pred_id,))
         
         # Revert sequence values
         if start_user_val > 0:
-            db.counters.update_one({'_id': 'users'}, {'$set': {'sequence_value': start_user_val}})
+            cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'", (start_user_val,))
         else:
-            db.counters.delete_one({'_id': 'users'})
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name = 'users'")
             
         if start_pred_val > 0:
-            db.counters.update_one({'_id': 'predictions'}, {'$set': {'sequence_value': start_pred_val}})
+            cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = 'predictions'", (start_pred_val,))
         else:
-            db.counters.delete_one({'_id': 'predictions'})
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name = 'predictions'")
+        conn.commit()
+        conn.close()
         print("Database cleanup completed.")
 
 if __name__ == '__main__':

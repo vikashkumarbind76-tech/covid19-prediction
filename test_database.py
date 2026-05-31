@@ -1,5 +1,6 @@
 import sys
 import os
+import sqlite3
 
 # Add the project directory to path so we can import from app.py
 sys.path.append(r"c:\Users\Vikash\OneDrive\Desktop\covid_project_demo\COVID19-Prediction-System")
@@ -15,11 +16,12 @@ from app import (
     db_get_predictions_by_user_id,
     db_get_all_predictions,
     db_get_users_map,
-    db_delete_prediction
+    db_delete_prediction,
+    DB_PATH
 )
 
 def test_database():
-    print("Testing Database dual-mode setup (should fall back to SQLite when Firebase is not configured)...")
+    print("Testing SQLite database operations...")
     
     # 1. Check connection
     connected = is_db_connected()
@@ -34,8 +36,7 @@ def test_database():
     
     # 3. Create a test user
     # Clean up any leftover test data for this ID from previous failed runs/crashes
-    import sqlite3
-    conn = sqlite3.connect(os.path.join(r"c:\Users\Vikash\OneDrive\Desktop\covid_project_demo\COVID19-Prediction-System", 'database', 'predictions.db'))
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM users WHERE id = ?", (user_seq,))
     cursor.execute("DELETE FROM predictions WHERE user_id = ?", (user_seq,))
@@ -110,18 +111,33 @@ def test_database():
     assert user_seq in users_map
     assert users_map[user_seq] == test_username
     
-    # 10. Clean up / Delete prediction
+    # 10. Test soft delete and direct database state
     print(f"Deleting prediction ID {pred_seq}...")
     db_delete_prediction(pred_seq)
+    
+    # Verify it is omitted from app queries
     deleted_pred = db_get_prediction_by_id(pred_seq)
-    print("Fetched deleted prediction:", deleted_pred)
+    print("Fetched active prediction after soft delete (should be None):", deleted_pred)
     assert deleted_pred is None
     
-    # Clean up user from database manually (so we don't pollute the test database)
-    import sqlite3
-    conn = sqlite3.connect(os.path.join(r"c:\Users\Vikash\OneDrive\Desktop\covid_project_demo\COVID19-Prediction-System", 'database', 'predictions.db'))
+    # Verify it still exists in raw database with is_deleted=1 (soft delete verification)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM predictions WHERE id = ?", (pred_seq,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    assert row is not None, "Record was permanently deleted, but should be soft deleted"
+    row_dict = dict(row)
+    assert row_dict['is_deleted'] == 1, f"is_deleted flag should be 1, found {row_dict['is_deleted']}"
+    print("Soft delete verified successfully in SQLite database!")
+    
+    # Clean up user and prediction from database manually (so we don't pollute the test database)
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM users WHERE id = ?", (user_seq,))
+    cursor.execute("DELETE FROM predictions WHERE id = ?", (pred_seq,))
     # Also revert sequences back in sqlite_sequence
     cursor.execute("UPDATE sqlite_sequence SET seq = seq - 1 WHERE name = 'users'")
     cursor.execute("UPDATE sqlite_sequence SET seq = seq - 1 WHERE name = 'predictions'")
