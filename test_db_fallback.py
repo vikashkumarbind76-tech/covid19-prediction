@@ -33,6 +33,15 @@ def test_database():
     print(f"Next sequence for 'predictions': {pred_seq}")
     
     # 3. Create a test user
+    # Clean up any leftover test data for this ID from previous failed runs/crashes
+    import sqlite3
+    conn = sqlite3.connect(os.path.join(r"c:\Users\Vikash\OneDrive\Desktop\covid_project_demo\COVID19-Prediction-System", 'database', 'predictions.db'))
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_seq,))
+    cursor.execute("DELETE FROM predictions WHERE user_id = ?", (user_seq,))
+    conn.commit()
+    conn.close()
+
     test_username = f"temp_user_{user_seq}"
     test_user_data = {
         'id': user_seq,

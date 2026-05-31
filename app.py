@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, s
 from werkzeug.security import generate_password_hash, check_password_hash
 from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError
+import sqlite3
 
 # Document Generation Imports
 from docx import Document
@@ -26,15 +27,20 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # MongoDB connection
 MONGO_URI = os.environ.get('MONGO_URI', 'mongodb://localhost:27017/')
 db = None
+DB_MODE = 'sqlite'
+client = None
+
 try:
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=2000)
     # Check connection
     client.server_info()
     db = client['covid_prediction_system']
+    DB_MODE = 'mongodb'
     print("Successfully connected to MongoDB.")
 except Exception as e:
-    print(f"Error connecting to MongoDB: {e}")
+    print(f"Error connecting to MongoDB, falling back to SQLite: {e}")
     db = None
+    DB_MODE = 'sqlite'
 
 # Define export paths
 if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
@@ -62,86 +68,436 @@ except Exception as e:
     print(f"Error loading model from {MODEL_PATH}: {e}")
     model = None
 
-# MongoDB helper functions
+# SQLite Compatibility wrappers for PyMongo syntax in tests
+class SQLiteCollectionWrapper:
+    def __init__(self, collection_name):
+        self.collection_name = collection_name
+        
+    def find_one(self, filter_dict, projection=None):
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        row = None
+        if self.collection_name == 'users':
+            if 'username' in filter_dict:
+                cursor.execute("SELECT * FROM users WHERE LOWER(username) = ?", (filter_dict['username'].strip().lower(),))
+                row = cursor.fetchone()
+            elif 'id' in filter_dict:
+                cursor.execute("SELECT * FROM users WHERE id = ?", (int(filter_dict['id']),))
+                row = cursor.fetchone()
+            else:
+                cursor.execute("SELECT * FROM users LIMIT 1")
+                row = cursor.fetchone()
+            conn.close()
+            return dict(row) if row else None
+            
+        elif self.collection_name == 'predictions':
+            if 'user_id' in filter_dict:
+                cursor.execute("SELECT * FROM predictions WHERE user_id = ? AND (is_deleted IS NULL OR is_deleted != 1)", (int(filter_dict['user_id']),))
+                row = cursor.fetchone()
+            elif 'id' in filter_dict:
+                cursor.execute("SELECT * FROM predictions WHERE id = ?", (int(filter_dict['id']),))
+                row = cursor.fetchone()
+            else:
+                cursor.execute("SELECT * FROM predictions LIMIT 1")
+                row = cursor.fetchone()
+            conn.close()
+            row_dict = dict(row) if row else None
+            if row_dict and 'is_deleted' in row_dict:
+                row_dict['is_deleted'] = bool(row_dict['is_deleted'])
+            return row_dict
+            
+        elif self.collection_name == 'counters':
+            seq_name = filter_dict.get('_id')
+            cursor.execute("SELECT seq FROM sqlite_sequence WHERE name = ?", (seq_name,))
+            row = cursor.fetchone()
+            
+            cursor.execute(f"SELECT MAX(id) FROM {seq_name}")
+            max_id_row = cursor.fetchone()
+            max_id = max_id_row[0] if max_id_row and max_id_row[0] is not None else 0
+            
+            if row is None:
+                cursor.execute("INSERT OR IGNORE INTO sqlite_sequence (name, seq) VALUES (?, ?)", (seq_name, max_id))
+                cursor.execute("SELECT seq FROM sqlite_sequence WHERE name = ?", (seq_name,))
+                row = cursor.fetchone()
+            else:
+                current_seq = row[0]
+                if current_seq < max_id:
+                    cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", (max_id, seq_name))
+                    cursor.execute("SELECT seq FROM sqlite_sequence WHERE name = ?", (seq_name,))
+                    row = cursor.fetchone()
+            conn.close()
+            if row:
+                return {'_id': seq_name, 'sequence_value': row[0]}
+            return {'_id': seq_name, 'sequence_value': max_id}
+        conn.close()
+        return None
+
+    def delete_one(self, filter_dict):
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        if self.collection_name == 'users':
+            if 'username' in filter_dict:
+                cursor.execute("DELETE FROM users WHERE LOWER(username) = ?", (filter_dict['username'].strip().lower(),))
+            elif 'id' in filter_dict:
+                cursor.execute("DELETE FROM users WHERE id = ?", (int(filter_dict['id']),))
+        elif self.collection_name == 'predictions':
+            if 'id' in filter_dict:
+                cursor.execute("DELETE FROM predictions WHERE id = ?", (int(filter_dict['id']),))
+        elif self.collection_name == 'counters':
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name = ?", (filter_dict['_id'],))
+        conn.commit()
+        conn.close()
+        return None
+
+    def update_one(self, filter_dict, update_dict):
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        if self.collection_name == 'counters':
+            seq_name = filter_dict['_id']
+            if '$set' in update_dict:
+                val = update_dict['$set']['sequence_value']
+                cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", (val, seq_name))
+            elif '$inc' in update_dict:
+                inc_val = update_dict['$inc']['sequence_value']
+                cursor.execute("UPDATE sqlite_sequence SET seq = seq + ? WHERE name = ?", (inc_val, seq_name))
+        conn.commit()
+        conn.close()
+        return None
+
+class SQLiteMongoWrapper:
+    def __init__(self):
+        self.users = SQLiteCollectionWrapper('users')
+        self.predictions = SQLiteCollectionWrapper('predictions')
+        self.counters = SQLiteCollectionWrapper('counters')
+
+# Assign db wrapper if we are in SQLite mode to satisfy direct db imports in test files
+if DB_MODE == 'sqlite':
+    db = SQLiteMongoWrapper()
+
+# Database Helper Functions
 def is_db_connected():
-    if db is not None:
+    if DB_MODE == 'mongodb':
+        if db is not None and not isinstance(db, SQLiteMongoWrapper):
+            try:
+                client.server_info()
+                return True
+            except Exception:
+                return False
+        return False
+    else:
         try:
-            client.server_info()
+            db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+            if not os.path.exists(os.path.dirname(db_path)):
+                os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            conn = sqlite3.connect(db_path)
+            conn.close()
             return True
         except Exception:
             return False
-    return False
 
 def get_next_sequence_value(sequence_name):
-    if db is None:
-        raise Exception("Database not connected.")
-    result = db.counters.find_one_and_update(
-        {'_id': sequence_name},
-        {'$inc': {'sequence_value': 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER
-    )
-    return result['sequence_value']
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            raise Exception("Database not connected.")
+        result = db.counters.find_one_and_update(
+            {'_id': sequence_name},
+            {'$inc': {'sequence_value': 1}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER
+        )
+        return result['sequence_value']
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Get the actual max ID in the table to avoid unique constraint violations
+        cursor.execute(f"SELECT MAX(id) FROM {sequence_name}")
+        max_id_row = cursor.fetchone()
+        max_id = max_id_row[0] if max_id_row and max_id_row[0] is not None else 0
+        
+        # Check if the sequence exists, if not initialize it
+        cursor.execute("SELECT seq FROM sqlite_sequence WHERE name = ?", (sequence_name,))
+        row = cursor.fetchone()
+        if row is None:
+            val = max_id + 1
+            cursor.execute("INSERT OR IGNORE INTO sqlite_sequence (name, seq) VALUES (?, ?)", (sequence_name, val))
+        else:
+            current_seq = row[0]
+            val = max(current_seq, max_id) + 1
+            cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", (val, sequence_name))
+        conn.commit()
+        conn.close()
+        return val
 
 def db_get_user_by_username(username):
-    if db is None:
-        return None
-    return db.users.find_one({'username': username.strip().lower()})
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            return None
+        return db.users.find_one({'username': username.strip().lower()})
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE LOWER(username) = ?", (username.strip().lower(),))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
 
 def db_get_user_by_id(user_id):
-    if db is None:
-        return None
-    return db.users.find_one({'id': int(user_id)})
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            return None
+        return db.users.find_one({'id': int(user_id)})
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE id = ?", (int(user_id),))
+        row = cursor.fetchone()
+        conn.close()
+        return dict(row) if row else None
 
 def db_create_user(user_id, user_data):
-    if db is None:
-        raise Exception("Database not connected.")
-    db.users.insert_one(user_data)
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            raise Exception("Database not connected.")
+        db.users.insert_one(user_data)
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        created_at = user_data.get('created_at')
+        if isinstance(created_at, datetime):
+            created_at = created_at.strftime('%Y-%m-%d %H:%M:%S')
+            
+        cursor.execute(
+            "INSERT INTO users (id, username, password, name, age, gender, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                int(user_id),
+                user_data['username'],
+                user_data['password'],
+                user_data['name'],
+                int(user_data['age']),
+                user_data['gender'],
+                created_at
+            )
+        )
+        conn.commit()
+        conn.close()
 
 def db_get_predictions_by_user_id(user_id):
-    if db is None:
-        return []
-    records = list(db.predictions.find({'user_id': int(user_id), 'is_deleted': {'$ne': True}}).sort('timestamp', -1))
-    return records
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            return []
+        records = list(db.predictions.find({'user_id': int(user_id), 'is_deleted': {'$ne': True}}).sort('timestamp', -1))
+        return records
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM predictions WHERE user_id = ? AND (is_deleted IS NULL OR is_deleted != 1) ORDER BY timestamp DESC",
+            (int(user_id),)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        res = []
+        for r in rows:
+            d = dict(r)
+            if 'is_deleted' in d:
+                d['is_deleted'] = bool(d['is_deleted'])
+            res.append(d)
+        return res
 
 def db_create_prediction(pred_id, pred_data):
-    if db is None:
-        raise Exception("Database not connected.")
-    db.predictions.insert_one(pred_data)
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            raise Exception("Database not connected.")
+        db.predictions.insert_one(pred_data)
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        timestamp = pred_data.get('timestamp')
+        if isinstance(timestamp, datetime):
+            timestamp = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            
+        cursor.execute(
+            """INSERT INTO predictions (
+                id, name, age, gender, fever, cough, sore_throat, 
+                shortness_of_breath, headache, age_60_and_above, contact, 
+                prediction_result, prediction_probability, timestamp, user_id, is_deleted
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                int(pred_id),
+                pred_data['name'],
+                int(pred_data['age']),
+                pred_data['gender'],
+                int(pred_data['fever']),
+                int(pred_data['cough']),
+                int(pred_data['sore_throat']),
+                int(pred_data['shortness_of_breath']),
+                int(pred_data['headache']),
+                int(pred_data['age_60_and_above']),
+                int(pred_data['contact']),
+                pred_data['prediction_result'],
+                float(pred_data['prediction_probability']),
+                timestamp,
+                int(pred_data['user_id']),
+                1 if pred_data.get('is_deleted') else 0
+            )
+        )
+        conn.commit()
+        conn.close()
 
 def db_get_prediction_by_id(pred_id):
-    if db is None:
-        return None
-    return db.predictions.find_one({'id': int(pred_id), 'is_deleted': {'$ne': True}})
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            return None
+        return db.predictions.find_one({'id': int(pred_id), 'is_deleted': {'$ne': True}})
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM predictions WHERE id = ? AND (is_deleted IS NULL OR is_deleted != 1)",
+            (int(pred_id),)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        d = dict(row) if row else None
+        if d and 'is_deleted' in d:
+            d['is_deleted'] = bool(d['is_deleted'])
+        return d
 
 def db_get_all_predictions():
-    if db is None:
-        return []
-    records = list(db.predictions.find({'is_deleted': {'$ne': True}}).sort('timestamp', -1))
-    return records
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            return []
+        records = list(db.predictions.find({'is_deleted': {'$ne': True}}).sort('timestamp', -1))
+        return records
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM predictions WHERE is_deleted IS NULL OR is_deleted != 1 ORDER BY timestamp DESC"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        res = []
+        for r in rows:
+            d = dict(r)
+            if 'is_deleted' in d:
+                d['is_deleted'] = bool(d['is_deleted'])
+            res.append(d)
+        return res
 
 def db_get_users_map():
-    if db is None:
-        return {}
-    users = db.users.find({}, {'id': 1, 'username': 1})
-    return {u['id']: u['username'] for u in users}
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            return {}
+        users = db.users.find({}, {'id': 1, 'username': 1})
+        return {u['id']: u['username'] for u in users}
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username FROM users")
+        rows = cursor.fetchall()
+        conn.close()
+        return {r[0]: r[1] for r in rows}
 
 def db_delete_prediction(pred_id):
-    if db is None:
-        raise Exception("Database not connected.")
-    # Soft delete: update is_deleted flag to permanently store the record
-    db.predictions.update_one({'id': int(pred_id)}, {'$set': {'is_deleted': True}})
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            raise Exception("Database not connected.")
+        db.predictions.update_one({'id': int(pred_id)}, {'$set': {'is_deleted': True}})
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE predictions SET is_deleted = 1 WHERE id = ?",
+            (int(pred_id),)
+        )
+        conn.commit()
+        conn.close()
 
 def init_db():
-    if db is None:
-        print("Database not connected. Skipping initialization.")
-        return
-    # Ensure unique index on username
-    db.users.create_index('username', unique=True)
-    # Ensure index on predictions id and user_id for faster queries
-    db.predictions.create_index('id')
-    db.predictions.create_index('user_id')
-    print("MongoDB Database connected and initialized with indexes.")
+    if DB_MODE == 'mongodb':
+        if db is None or isinstance(db, SQLiteMongoWrapper):
+            print("Database not connected. Skipping initialization.")
+            return
+        # Ensure unique index on username
+        db.users.create_index('username', unique=True)
+        # Ensure index on predictions id and user_id for faster queries
+        db.predictions.create_index('id')
+        db.predictions.create_index('user_id')
+        print("MongoDB Database connected and initialized with indexes.")
+    else:
+        db_path = os.path.join(BASE_DIR, 'database', 'predictions.db')
+        if not os.path.exists(os.path.dirname(db_path)):
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Create users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY,
+                username TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                name TEXT NOT NULL,
+                age INTEGER NOT NULL,
+                gender TEXT NOT NULL,
+                created_at TEXT
+            )
+        """)
+        
+        # Create predictions table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS predictions (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                age INTEGER NOT NULL,
+                gender TEXT NOT NULL,
+                fever INTEGER NOT NULL,
+                cough INTEGER NOT NULL,
+                sore_throat INTEGER NOT NULL,
+                shortness_of_breath INTEGER NOT NULL,
+                headache INTEGER NOT NULL,
+                age_60_and_above INTEGER NOT NULL,
+                contact INTEGER NOT NULL,
+                prediction_result TEXT NOT NULL,
+                prediction_probability REAL NOT NULL,
+                timestamp TEXT,
+                user_id INTEGER
+            )
+        """)
+        
+        # Check if is_deleted column exists in predictions table, if not add it
+        cursor.execute("PRAGMA table_info(predictions)")
+        cols = [col[1] for col in cursor.fetchall()]
+        if 'is_deleted' not in cols:
+            cursor.execute("ALTER TABLE predictions ADD COLUMN is_deleted INTEGER DEFAULT 0")
+            
+        conn.commit()
+        conn.close()
+        print("SQLite Database initialized successfully.")
 
 init_db()
 
