@@ -52,7 +52,7 @@
         </section>
 
         <!-- Stats row -->
-        <section class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 2rem;">
+        <section class="stats-grid patient-stats" style="margin-bottom: 2rem;">
             <div class="stat-card glass-card">
                 <div class="stat-icon icon-blue"><i class="fa-solid fa-clipboard-check"></i></div>
                 <div class="stat-info">
@@ -104,25 +104,25 @@
                     <tbody>
                         {% for record in records %}
                         <tr>
-                            <td class="col-id">#COVID-00{{ record.id }}</td>
-                            <td class="col-time">{{ record.timestamp }}</td>
-                            <td class="col-symptoms">
+                            <td class="col-id" data-label="Ref ID">#COVID-00{{ record.id }}</td>
+                            <td class="col-time" data-label="Assessment Time">{{ record.timestamp }}</td>
+                            <td class="col-symptoms" data-label="Logged Symptoms">
                                 <span class="symptoms-tooltip-trigger" title="{{ record.symptoms }}">
                                     {{ record.symptoms }}
                                 </span>
                             </td>
-                            <td class="col-contact">
+                            <td class="col-contact" data-label="Exposure">
                                 <span class="badge {% if record.contact == 'Yes' %}badge-yellow{% else %}badge-slate{% endif %}">
                                     {{ record.contact }}
                                 </span>
                             </td>
-                            <td class="col-result">
+                            <td class="col-result" data-label="Risk Outcome">
                                 <span class="result-indicator {{ record.risk_class }}">{{ record.result }}</span>
                             </td>
-                            <td class="col-prob">
+                            <td class="col-prob" data-label="Probability">
                                 <span class="probability-glow" style="text-shadow: 0 0 8px rgba(6, 182, 212, 0.3);">{{ record.probability }}%</span>
                             </td>
-                            <td style="display: flex; gap: 0.5rem; justify-content: center;">
+                            <td data-label="Clinical Report Downloads" style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
                                 <a href="{{ url_for('download_docx', pred_id=record.id) }}" class="btn btn-secondary btn-sm" style="background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.25); color: #818cf8; font-weight: 500;">
                                     <i class="fa-solid fa-file-word" style="color: #6366f1;"></i> Word Doc
                                 </a>

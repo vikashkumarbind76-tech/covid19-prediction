@@ -4,5 +4,5 @@ pandas
 scikit-learn
 python-docx
 reportlab
-firebase-admin
+pymongo
 

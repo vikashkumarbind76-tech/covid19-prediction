@@ -158,29 +158,29 @@
                     <tbody>
                         {% for record in records %}
                         <tr class="prediction-row" data-name="{{ record.name | lower }}" data-result="{{ record.result }}" data-gender="{{ record.gender }}">
-                            <td class="col-id">#{{ record.id }}</td>
-                            <td class="col-name"><strong>{{ record.name }}</strong></td>
-                            <td class="col-username"><span class="badge badge-slate"><i class="fa-solid fa-circle-user"></i> {{ record.user_username }}</span></td>
-                            <td class="col-age">{{ record.age }} y/o</td>
-                            <td class="col-gender">{{ record.gender }}</td>
-                            <td class="col-symptoms">
+                            <td class="col-id" data-label="ID">#{{ record.id }}</td>
+                            <td class="col-name" data-label="Patient Name"><strong>{{ record.name }}</strong></td>
+                            <td class="col-username" data-label="Account"><span class="badge badge-slate"><i class="fa-solid fa-circle-user"></i> {{ record.user_username }}</span></td>
+                            <td class="col-age" data-label="Age">{{ record.age }} y/o</td>
+                            <td class="col-gender" data-label="Gender">{{ record.gender }}</td>
+                            <td class="col-symptoms" data-label="Symptoms Logged">
                                 <span class="symptoms-tooltip-trigger" title="{{ record.symptoms }}">
                                     {{ record.symptoms }}
                                 </span>
                             </td>
-                            <td class="col-contact">
+                            <td class="col-contact" data-label="Exposure">
                                 <span class="badge {% if record.contact == 'Yes' %}badge-yellow{% else %}badge-slate{% endif %}">
                                     {{ record.contact }}
                                 </span>
                             </td>
-                            <td class="col-result">
+                            <td class="col-result" data-label="Result Status">
                                 <span class="result-indicator {{ record.risk_class }}">{{ record.result }}</span>
                             </td>
-                            <td class="col-prob">
+                            <td class="col-prob" data-label="Risk Score">
                                 <span class="probability-glow">{{ record.probability }}%</span>
                             </td>
-                            <td class="col-time">{{ record.timestamp }}</td>
-                            <td class="col-actions">
+                            <td class="col-time" data-label="Timestamp">{{ record.timestamp }}</td>
+                            <td class="col-actions" data-label="Actions">
                                 <button type="button" class="btn-delete-record" data-id="{{ record.id }}" title="Delete Assessment">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
