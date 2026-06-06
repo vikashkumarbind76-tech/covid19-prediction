@@ -895,10 +895,10 @@ def admin_login():
         
     error = None
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
         
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        if ADMIN_USERNAME and ADMIN_PASSWORD and username.lower() == ADMIN_USERNAME.lower() and password == ADMIN_PASSWORD:
             session['admin_logged_in'] = True
             return redirect(url_for('admin_dashboard'))
         else:
