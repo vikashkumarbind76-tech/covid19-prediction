@@ -5,7 +5,11 @@ from datetime import datetime
 # Add the project directory to path
 sys.path.append(r"c:\Users\Vikash\OneDrive\Desktop\covid_project_demo\COVID19-Prediction-System")
 
-from app import app, get_next_sequence_value, DB_PATH
+# Set test environment variables before importing app
+os.environ['ADMIN_USERNAME'] = 'test_admin_user'
+os.environ['ADMIN_PASSWORD'] = 'test_admin_password_123'
+
+from app import app, get_next_sequence_value, DB_PATH, ADMIN_USERNAME, ADMIN_PASSWORD
 import sqlite3
 
 def run_integration_tests():
@@ -205,8 +209,8 @@ def run_integration_tests():
         
         # POST admin login (correct credentials)
         res = client.post('/admin/login', data={
-            'username': 'admin',
-            'password': 'vikashkumarbind09'
+            'username': ADMIN_USERNAME,
+            'password': ADMIN_PASSWORD
         }, follow_redirects=True)
         assert res.status_code == 200
         print("PASS: Admin login succeeds and enters dashboard")

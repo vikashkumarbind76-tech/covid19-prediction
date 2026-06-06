@@ -18,10 +18,21 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Load environment variables from local .env file if it exists
+env_path = os.path.join(BASE_DIR, '.env')
+if os.path.exists(env_path):
+    with open(env_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                if '=' in line:
+                    key, val = line.split('=', 1)
+                    os.environ[key.strip()] = val.strip()
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'covid19_prediction_system_secret_key_123!@#')
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Define export and database paths
 if os.environ.get('VERCEL') or os.environ.get('AWS_LAMBDA_FUNCTION_NAME'):
@@ -39,9 +50,12 @@ try:
 except Exception as e:
     print(f"Warning: Could not create directories: {e}")
 
-# Admin Credentials
-ADMIN_USERNAME = 'admin'
-ADMIN_PASSWORD = 'vikashkumarbind09'
+# Admin Credentials (strictly from environment, no hardcoded fallbacks in source code)
+ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME')
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
+
+if not ADMIN_USERNAME or not ADMIN_PASSWORD:
+    print("WARNING: ADMIN_USERNAME or ADMIN_PASSWORD is not set in environment variables or .env file.")
 
 # Load the ML model
 MODEL_PATH = os.path.join(BASE_DIR, 'covid19Model.pkl')
